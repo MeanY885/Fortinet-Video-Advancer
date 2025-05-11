@@ -9,17 +9,17 @@
             <style>
                 #fortinet-auto-advancer-ui {
                     position: fixed;
-                    top: 20px;
-                    right: 20px;
+                    top: 4px;
+                    right: 4px;
                     z-index: 99999;
-                    background: rgba(34, 34, 34, 0.96);
-                    border-radius: 12px;
-                    box-shadow: 0 2px 12px 0 rgba(0,0,0,0.18);
-                    padding: 16px 14px 10px 14px;
-                    min-width: 270px;
+                    background: rgba(34, 34, 34, 0.97);
+                    border-radius: 10px;
+                    box-shadow: 0 2px 8px 0 rgba(0,0,0,0.12);
+                    padding: 8px 10px 8px 12px;
+                    min-width: 180px;
                     font-family: 'Segoe UI', Arial, sans-serif;
                     color: #fff;
-                    font-size: 15px;
+                    font-size: 14px;
                     max-width: 95vw;
                     max-height: 90vh;
                     overflow: auto;
@@ -76,12 +76,20 @@
                     overflow-y: auto;
                 }
             </style>
-            <h4>Fortinet Auto-Advancer</h4>
-            <div id="faa-debug-console">Fortinet Advancer Active</div>
-            <div id="faa-toggle-row">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;">
+                <span style="font-weight:bold;font-size:14px;">Fortinet Auto Advancer</span>
+                <div style="display:flex;gap:3px;">
+                    <button id="faa-showlog-btn" style="background:#444;color:#fff;border:none;border-radius:3px;padding:2px 6px;cursor:pointer;font-size:12px;">Hide Log</button>
+                    <button id="faa-hideui-btn" style="background:#444;color:#fff;border:none;border-radius:3px;padding:2px 6px;cursor:pointer;font-size:12px;">Hide UI</button>
+                    <button id="faa-closeui-btn" style="background:#444;color:#fff;border:none;border-radius:3px;padding:2px 6px;cursor:pointer;font-size:12px;">×</button>
+                </div>
+            </div>
+            <div id="faa-toggle-row" style="margin-top:6px;display:flex;align-items:center;gap:8px;">
                 <span id="faa-toggle-label">Auto-Advance:</span>
                 <input type="checkbox" id="faa-toggle" />
             </div>
+            <div id="faa-debug-console" style="margin-top:6px;"></div>
+
         `;
         document.body.appendChild(container);
         // Ensure the UI stays within viewport if moved
@@ -106,6 +114,79 @@
         // Clamp initially
         setTimeout(clampToViewport, 100);
     }
+
+    // ================ UI BUTTON LOGIC ================
+    function setupAdvancerUIButtons() {
+        var showLogBtn = document.getElementById('faa-showlog-btn');
+        var debugConsole = document.getElementById('faa-debug-console');
+        var hideUiBtn = document.getElementById('faa-hideui-btn');
+        var closeUiBtn = document.getElementById('faa-closeui-btn');
+        var advUi = document.getElementById('fortinet-auto-advancer-ui');
+        if (showLogBtn && debugConsole) {
+            showLogBtn.addEventListener('click', function() {
+                if (debugConsole.style.display === 'none') {
+                    debugConsole.style.display = '';
+                    showLogBtn.textContent = 'Hide Log';
+                } else {
+                    debugConsole.style.display = 'none';
+                    showLogBtn.textContent = 'Show Log';
+                }
+            });
+        }
+        if (hideUiBtn && advUi) {
+            hideUiBtn.addEventListener('click', function() {
+                advUi.style.display = 'none';
+                var restoreBtn = document.createElement('button');
+                restoreBtn.id = 'faa-restoreui-btn';
+                restoreBtn.textContent = 'Show Advancer';
+                restoreBtn.style.position = 'fixed';
+                restoreBtn.style.top = '4px';
+                restoreBtn.style.right = '4px';
+                restoreBtn.style.zIndex = 100000;
+                restoreBtn.style.background = '#444';
+                restoreBtn.style.color = '#fff';
+                restoreBtn.style.border = 'none';
+                restoreBtn.style.borderRadius = '8px';
+                restoreBtn.style.fontSize = '12px';
+                restoreBtn.style.padding = '2px 10px';
+                restoreBtn.style.cursor = 'pointer';
+                restoreBtn.onclick = function() {
+                    advUi.style.display = '';
+                    restoreBtn.remove();
+                };
+                document.body.appendChild(restoreBtn);
+            });
+        }
+        if (closeUiBtn && advUi) {
+            closeUiBtn.addEventListener('click', function() {
+                advUi.style.display = 'none';
+                var reopenBtn = document.createElement('button');
+                reopenBtn.id = 'faa-reopenui-btn';
+                reopenBtn.textContent = '🟢';
+                reopenBtn.title = 'Show Fortinet Advancer';
+                reopenBtn.style.position = 'fixed';
+                reopenBtn.style.top = '4px';
+                reopenBtn.style.right = '4px';
+                reopenBtn.style.zIndex = 100000;
+                reopenBtn.style.background = '#fff';
+                reopenBtn.style.color = '#444';
+                reopenBtn.style.border = '1px solid #444';
+                reopenBtn.style.borderRadius = '10px';
+                reopenBtn.style.fontSize = '16px';
+                reopenBtn.style.padding = '2px 10px';
+                reopenBtn.style.cursor = 'pointer';
+                reopenBtn.onclick = function() {
+                    advUi.style.display = '';
+                    reopenBtn.remove();
+                };
+                document.body.appendChild(reopenBtn);
+            });
+        }
+    }
+
+    // Call after UI is injected
+    injectUI();
+    setupAdvancerUIButtons();
 
     // ================ DEBUG CONSOLE ================
     let lastDebugMsg = null;
