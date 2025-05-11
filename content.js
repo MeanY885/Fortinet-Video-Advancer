@@ -20,6 +20,9 @@
                     font-family: 'Segoe UI', Arial, sans-serif;
                     color: #fff;
                     font-size: 15px;
+                    max-width: 95vw;
+                    max-height: 90vh;
+                    overflow: auto;
                 }
                 #fortinet-auto-advancer-ui h4 {
                     margin: 0 0 6px 0;
@@ -69,7 +72,8 @@
                     margin-top: 5px;
                     padding: 8px 6px;
                     font-size: 13px;
-                    max-height: 140px;
+                    max-height: 120px;
+                    overflow-y: auto;
                 }
             </style>
             <h4>Fortinet Auto-Advancer</h4>
@@ -80,6 +84,27 @@
             </div>
         `;
         document.body.appendChild(container);
+        // Ensure the UI stays within viewport if moved
+        function clampToViewport() {
+            const rect = container.getBoundingClientRect();
+            let changed = false;
+            let left = rect.left, top = rect.top;
+            if (rect.right > window.innerWidth) { left -= (rect.right - window.innerWidth); changed = true; }
+            if (rect.bottom > window.innerHeight) { top -= (rect.bottom - window.innerHeight); changed = true; }
+            if (rect.left < 0) { left = 0; changed = true; }
+            if (rect.top < 0) { top = 0; changed = true; }
+            if (changed) {
+                container.style.left = left + 'px';
+                container.style.top = top + 'px';
+                container.style.right = '';
+            }
+        }
+        // Clamp after any mouseup (in case user moves it)
+        window.addEventListener('mouseup', clampToViewport);
+        // Clamp on window resize
+        window.addEventListener('resize', clampToViewport);
+        // Clamp initially
+        setTimeout(clampToViewport, 100);
     }
 
     // ================ DEBUG CONSOLE ================
