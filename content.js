@@ -2,7 +2,8 @@
 (function() {
     // ================= UI SETUP =================
     function injectUI() {
-        if (document.getElementById('fortinet-auto-advancer-ui')) return;
+        const oldUi = document.getElementById('fortinet-auto-advancer-ui');
+        if (oldUi) oldUi.remove();
         const container = document.createElement('div');
         container.id = 'fortinet-auto-advancer-ui';
         container.innerHTML = `
@@ -92,6 +93,7 @@
 
         `;
         document.body.appendChild(container);
+        setupAdvancerUIButtons();
         // Ensure the UI stays within viewport if moved
         function clampToViewport() {
             const rect = container.getBoundingClientRect();
@@ -185,8 +187,18 @@
     }
 
     // Call after UI is injected
-    injectUI();
-    setupAdvancerUIButtons();
+    // Prevent multiple UI instances
+    if (!window._faaUiInjected) {
+        var progressBarFill = document.querySelector('[data-ref="progressBarFill"]');
+        if (progressBarFill) {
+            var widthMatch = (progressBarFill.getAttribute('style')||'').match(/width:\s*([0-9.]+)%/);
+            var width = widthMatch ? parseFloat(widthMatch[1]) : 0;
+            if (width > 2) {
+                window._faaUiInjected = true;
+                injectUI();
+            }
+        }
+    }
 
     // ================ DEBUG CONSOLE ================
     let lastDebugMsg = null;
