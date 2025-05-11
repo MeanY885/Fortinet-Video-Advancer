@@ -70,17 +70,14 @@
                     padding: 8px 6px;
                     font-size: 13px;
                     max-height: 140px;
-                    overflow-y: auto;
-                    border: 1px solid #444;
-                    min-height: 36px;
                 }
             </style>
             <h4>Fortinet Auto-Advancer</h4>
+            <div id="faa-debug-console">Fortinet Advancer Active</div>
             <div id="faa-toggle-row">
                 <span id="faa-toggle-label">Auto-Advance:</span>
                 <input type="checkbox" id="faa-toggle" />
             </div>
-            <div id="faa-debug-console"></div>
         `;
         document.body.appendChild(container);
     }
