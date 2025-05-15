@@ -5,6 +5,7 @@
   "description": "Automatically advances to the next video on Fortinet SCORM player when the progress bar reaches 100%.",
   "content_scripts": [
     {
+      "all_frames": true,
       "matches": [
         "https://training.fortinet.com/*"
       ],
@@ -12,5 +13,16 @@
       "all_frames": true
     }
   ],
-  "permissions": ["activeTab", "storage"]
+  "background": {
+    "service_worker": "background.js"
+  },
+  "host_permissions": [
+    "https://training.fortinet.com/*"
+  ],
+  "permissions": [
+    "activeTab",
+    "storage",
+    "scripting",
+    "webNavigation"
+  ]
 }

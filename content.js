@@ -346,7 +346,30 @@
             logNextXhr = true;
             setTimeout(() => { logNextXhr = false; }, 2000);
         } else {
-            logDebug('No NEXT navigation button or link found or visible.');
+            logDebug('No NEXT navigation button or link found or visible. Attempting redirect to course homepage.');
+            // Try to find the course homepage link in current frame
+            var backToCourse = document.querySelector('a.backtocourse[href*="course/view.php?id="]');
+            if (backToCourse && backToCourse.href) {
+                logDebug('Redirecting to course homepage from current frame: ' + backToCourse.href);
+                window.location.href = backToCourse.href;
+                return;
+            }
+            // Try to find the course homepage link in top window (if not same as current)
+            try {
+                if (window.top && window.top !== window && window.top.document) {
+                    var topBackToCourse = window.top.document.querySelector('a.backtocourse[href*="course/view.php?id="]');
+                    if (topBackToCourse && topBackToCourse.href) {
+                        logDebug('Redirecting to course homepage from top window: ' + topBackToCourse.href);
+                        window.top.location.href = topBackToCourse.href;
+                        return;
+                    } else {
+                        logDebug('No course homepage link found in top window.');
+                    }
+                }
+            } catch (e) {
+                logDebug('Unable to access top window for course homepage link (likely cross-origin).');
+            }
+            logDebug('No course homepage link found in any context.');
         }
     }
 
