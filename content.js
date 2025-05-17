@@ -1,5 +1,7 @@
 // Fortinet Video Auto-Advancer Content Script with Toggle and Debug Console
 (function() {
+    // Track the current lesson number for sequential navigation
+    let currentLessonNumber = 2; // Start with LESSON02
     // ================= UI SETUP =================
     function injectUI() {
         const oldUi = document.getElementById('fortinet-auto-advancer-ui');
@@ -80,6 +82,7 @@
             <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;">
                 <span style="font-weight:bold;font-size:14px;">Fortinet Auto Advancer</span>
                 <div style="display:flex;gap:3px;">
+                    <button id="faa-reset-btn" style="background:#d9534f;color:#fff;border:none;border-radius:3px;padding:2px 6px;cursor:pointer;font-size:12px;">Reset to LESSON02</button>
                     <button id="faa-showlog-btn" style="background:#444;color:#fff;border:none;border-radius:3px;padding:2px 6px;cursor:pointer;font-size:12px;">Hide Log</button>
                     <button id="faa-hideui-btn" style="background:#444;color:#fff;border:none;border-radius:3px;padding:2px 6px;cursor:pointer;font-size:12px;">Hide UI</button>
                     <button id="faa-closeui-btn" style="background:#444;color:#fff;border:none;border-radius:3px;padding:2px 6px;cursor:pointer;font-size:12px;">×</button>
@@ -123,6 +126,7 @@
         var debugConsole = document.getElementById('faa-debug-console');
         var hideUiBtn = document.getElementById('faa-hideui-btn');
         var closeUiBtn = document.getElementById('faa-closeui-btn');
+        var resetBtn = document.getElementById('faa-reset-btn');
         var advUi = document.getElementById('fortinet-auto-advancer-ui');
         if (showLogBtn && debugConsole) {
             showLogBtn.addEventListener('click', function() {
@@ -184,6 +188,21 @@
                 document.body.appendChild(reopenBtn);
             });
         }
+        
+        // Add reset button event listener
+        if (resetBtn) {
+            resetBtn.addEventListener('click', function() {
+                setCurrentLessonNumber(2); // Reset to LESSON02
+                logDebug('State reset - Current lesson set back to LESSON02');
+                
+                // If on homepage, attempt to find and click LESSON02 now
+                if (isHomePage()) {
+                    setTimeout(() => {
+                        findAndClickNextLesson();
+                    }, 500);
+                }
+            });
+        }
     }
 
     // Call after UI is injected
@@ -229,6 +248,16 @@
         chrome.storage.local.get(['faa_enabled'], (result) => {
             cb(result.faa_enabled !== false); // default ON
         });
+    }
+    function getCurrentLessonNumber(cb) {
+        chrome.storage.local.get(['faa_current_lesson'], (result) => {
+            cb(result.faa_current_lesson || 2); // default to start with LESSON02
+        });
+    }
+    function setCurrentLessonNumber(lessonNumber) {
+        chrome.storage.local.set({ 'faa_current_lesson': lessonNumber });
+        currentLessonNumber = lessonNumber;
+        logDebug(`Current lesson number set to ${lessonNumber}`);
     }
 
     // ================ MAIN LOGIC ================
@@ -372,6 +401,136 @@
             logDebug('No course homepage link found in any context.');
         }
     }
+    
+    // Function to check if we're on the homepage
+    function isHomePage() {
+        // Check if we're on the course view page
+        return window.location.href.includes('course/view.php');
+    }
+    
+    // Function to find and click the next lesson in sequence
+    function findAndClickNextLesson() {
+        getCurrentLessonNumber(lessonNumber => {
+            // Format with space after LESSON as seen in HTML: "LESSON 02"
+            const lessonNumber2Digits = String(lessonNumber).padStart(2, '0');
+            const lessonSpaceFormat = `LESSON ${lessonNumber2Digits}`;
+            const lessonNoSpaceFormat = `LESSON${lessonNumber2Digits}`;
+            
+            logDebug(`Looking for lesson formats: "${lessonSpaceFormat}" or "${lessonNoSpaceFormat}"...`);
+            
+            // Track the clickable parent element
+            let lessonElement = null;
+            let lessonLink = null;
+            
+            // First approach: Find direct data-activityname attributes
+            const activityElements = document.querySelectorAll('[data-activityname]');
+            for (const element of activityElements) {
+                const activityName = element.getAttribute('data-activityname');
+                if (activityName && (
+                    activityName.includes(lessonSpaceFormat) || 
+                    activityName.includes(lessonNoSpaceFormat)
+                )) {
+                    // Found the lesson container - now find closest clickable element
+                    lessonElement = element;
+                    logDebug(`Found lesson ${lessonNumber} by data-activityname: "${activityName}"`);
+                    
+                    // Try to find the anchor tag within this container
+                    const anchor = element.querySelector('a');
+                    if (anchor) {
+                        lessonLink = anchor;
+                        logDebug('Found anchor element inside activity container');
+                    } else {
+                        // The element itself might be clickable
+                        lessonLink = element;
+                    }
+                    break;
+                }
+            }
+            
+            // Second approach: Look for div.activityname with matching text inside its children
+            if (!lessonLink) {
+                const activityNameDivs = document.querySelectorAll('div.activityname');
+                for (const div of activityNameDivs) {
+                    const text = div.textContent || '';
+                    if (text.includes(lessonSpaceFormat) || text.includes(lessonNoSpaceFormat)) {
+                        // Found a matching activity name - check for parent link
+                        let parent = div;
+                        // Walk up 5 levels at most to find a clickable parent
+                        for (let i = 0; i < 5; i++) {
+                            if (!parent) break;
+                            
+                            // Check if this element has an anchor
+                            const anchor = parent.querySelector('a');
+                            if (anchor) {
+                                lessonLink = anchor;
+                                logDebug(`Found lesson ${lessonNumber} link from activityname div: "${text}"`);
+                                break;
+                            }
+                            
+                            // Move to parent
+                            parent = parent.parentElement;
+                        }
+                        if (lessonLink) break;
+                    }
+                }
+            }
+            
+            // Third approach: Look for any a[href] with text content matching our lesson
+            if (!lessonLink) {
+                const allLinks = document.querySelectorAll('a[href]');
+                for (const link of allLinks) {
+                    const text = link.textContent || '';
+                    if (text.includes(lessonSpaceFormat) || text.includes(lessonNoSpaceFormat)) {
+                        lessonLink = link;
+                        logDebug(`Found lesson ${lessonNumber} by direct link text: "${text}"`);
+                        break;
+                    }
+                }
+            }
+            
+            // Fourth approach: Look through any div that has the lesson text
+            if (!lessonLink) {
+                const allDivs = document.querySelectorAll('div');
+                for (const div of allDivs) {
+                    const text = div.textContent || '';
+                    if (text.includes(lessonSpaceFormat) || text.includes(lessonNoSpaceFormat)) {
+                        // Check if this div or its parent is clickable
+                        if (div.onclick || div.classList.contains('clickable') || div.style.cursor === 'pointer') {
+                            lessonLink = div;
+                            logDebug(`Found lesson ${lessonNumber} via clickable div: "${text}"`);
+                            break;
+                        }
+                        
+                        // Try to find parent activity-item
+                        let parent = div.closest('.activity-item');
+                        if (parent) {
+                            lessonLink = parent;
+                            logDebug(`Found lesson ${lessonNumber} via parent activity-item`);
+                            break;
+                        }
+                    }
+                }
+            }
+            
+            // If found a lesson link, click it and update lesson counter
+            if (lessonLink) {
+                // Scroll to the element to make sure it's visible
+                lessonLink.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                
+                // Set a slight delay before clicking to ensure scrolling is complete
+                setTimeout(() => {
+                    // Increment the lesson number for next time
+                    setCurrentLessonNumber(lessonNumber + 1);
+                    
+                    // Click the lesson element
+                    logDebug(`Clicking on lesson ${lessonNumber}`);
+                    lessonLink.click();
+                }, 500);
+            } else {
+                logDebug(`Could not find lesson ${lessonNumber} on the page. Course may be complete.`);
+            }
+        });
+    }
 
     // ================ INIT ================
     function setupToggleUI() {
@@ -387,7 +546,24 @@
 
     function startScript() {
         function afterDOMReady() {
-            // Only run if the progress bar is present in this frame
+            // Check if we're on the homepage and should click the next lesson
+            if (isHomePage()) {
+                logDebug('Detected course homepage.');
+                setupToggleUI();
+                
+                getToggleState(enabled => {
+                    if (enabled) {
+                        // Wait a moment for the page to fully load before searching for the next lesson
+                        setTimeout(() => {
+                            logDebug('Searching for next lesson button to click...');
+                            findAndClickNextLesson();
+                        }, 1500);
+                    }
+                });
+                return;
+            }
+            
+            // Only run progress bar watcher if the progress bar is present in this frame
             if (!document.querySelector('[data-ref="progressBarFill"]')) {
                 return; // Do nothing in frames without the player bar
             }
