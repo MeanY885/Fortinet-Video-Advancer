@@ -2,10 +2,18 @@
 (function() {
     // Track the current lesson number for sequential navigation
     let currentLessonNumber = 2; // Start with LESSON02
+    
+    // Ensure UI is only injected in the top frame
+    const isTopFrame = window === window.top;
     // ================= UI SETUP =================
     function injectUI() {
+        // Only inject UI in the top frame
+        if (!isTopFrame) return;
+        
+        // Check if UI already exists on the page
         const oldUi = document.getElementById('fortinet-auto-advancer-ui');
         if (oldUi) oldUi.remove();
+        
         const container = document.createElement('div');
         container.id = 'fortinet-auto-advancer-ui';
         container.innerHTML = `
@@ -205,18 +213,12 @@
         }
     }
 
-    // Call after UI is injected
+    // Call after UI is injected - but only in top frame
     // Prevent multiple UI instances
-    if (!window._faaUiInjected) {
-        var progressBarFill = document.querySelector('[data-ref="progressBarFill"]');
-        if (progressBarFill) {
-            var widthMatch = (progressBarFill.getAttribute('style')||'').match(/width:\s*([0-9.]+)%/);
-            var width = widthMatch ? parseFloat(widthMatch[1]) : 0;
-            if (width > 2) {
-                window._faaUiInjected = true;
-                injectUI();
-            }
-        }
+    if (isTopFrame && !window._faaUiInjected) {
+        // Only inject UI in top frame, regardless of whether we find a progress bar
+        window._faaUiInjected = true;
+        injectUI();
     }
 
     // ================ DEBUG CONSOLE ================
@@ -224,6 +226,24 @@
     function logDebug(msg) {
         if (msg === lastDebugMsg) return; // suppress consecutive duplicate
         lastDebugMsg = msg;
+        
+        // Always log to console for debugging
+        console.log('[FAA]', msg);
+        
+        // If we're in an iframe, send the message to the top frame
+        if (!isTopFrame) {
+            try {
+                window.top.postMessage({
+                    type: 'faa-debug',
+                    message: msg
+                }, '*');
+            } catch (e) {
+                // Ignore cross-origin errors
+            }
+            return;
+        }
+        
+        // In top frame, update the UI
         const consoleDiv = document.getElementById('faa-debug-console');
         if (consoleDiv) {
             const now = new Date();
@@ -233,8 +253,15 @@
             consoleDiv.appendChild(entry);
             consoleDiv.scrollTop = consoleDiv.scrollHeight;
         }
-        // Optionally, also log to browser console for devs
-        // console.log('[FAA]', msg);
+    }
+    
+    // Listen for messages from iframes
+    if (isTopFrame) {
+        window.addEventListener('message', function(event) {
+            if (event.data && event.data.type === 'faa-debug') {
+                logDebug(`[iframe] ${event.data.message}`);
+            }
+        });
     }
 
     // ================ TOGGLE HANDLING ================
@@ -270,16 +297,103 @@
 
     function waitForProgressBarFill() {
         let hasLoggedNeverFound = false;
+        let storylineProgressInterval = null;
+        
+        function checkForStorylineProgress() {
+            // Check for Storyline 360 progress elements
+            const storylineProgressIndicators = [
+                // Check for Storyline's progress control div
+                document.querySelector('#progress-container'),
+                // Check for a control bar that might contain progress
+                document.querySelector('#control-bar'),
+                // Check for standard Storyline progress elements
+                document.querySelector('.slide-progress'),
+                // Look for any element with progress in the class name
+                document.querySelector('[class*="progress"]'),
+                // Look for any element with slider in the class name
+                document.querySelector('[class*="slider"]')
+            ].filter(Boolean);
+            
+            if (storylineProgressIndicators.length > 0) {
+                logDebug('Found Storyline progress indicators: ' + storylineProgressIndicators.length);
+                // Clear interval since we found progress indicators
+                if (storylineProgressInterval) {
+                    clearInterval(storylineProgressInterval);
+                    storylineProgressInterval = null;
+                }
+                
+                // Setup an interval to check for progress
+                setInterval(() => {
+                    // For Storyline content, we need to periodically check if we're at the end
+                    // Check if we can find a Next button that's active
+                    const nextButtons = Array.from(document.querySelectorAll('button, .button, [role="button"], #next, #nextBtn, .next-slide, .nextslide, .button-next'));
+                    const activeNextButton = nextButtons.find(btn => {
+                        const text = (btn.textContent || '').toLowerCase();
+                        const isVisible = btn.offsetParent !== null;
+                        const isNext = text.includes('next') || btn.id.toLowerCase().includes('next') || 
+                                    (btn.className && btn.className.toLowerCase().includes('next'));
+                        return isVisible && isNext && !btn.disabled;
+                    });
+                    
+                    if (activeNextButton) {
+                        logDebug('Found active Next button in Storyline content. Clicking it.');
+                        activeNextButton.click();
+                    }
+                    
+                    // Also check for completion indicators
+                    const completionIndicators = [
+                        document.querySelector('.completed'),
+                        document.querySelector('.complete-slide'),
+                        document.querySelector('.finish-slide'),
+                        document.querySelector('[data-complete="true"]')
+                    ].filter(Boolean);
+                    
+                    if (completionIndicators.length > 0) {
+                        logDebug('Found completion indicators. Attempting to advance.');
+                        clickNextButton();
+                    }
+                }, 5000);
+                
+                return true;
+            }
+            
+            return false;
+        }
+        
         function poll() {
+            // First try to find standard Fortinet progress bar
             const progressBarFill = document.querySelector('[data-ref="progressBarFill"]');
+            
             if (!progressBarFill) {
+                // If no standard progress bar, check for Storyline progress
+                if (checkForStorylineProgress()) {
+                    // Found Storyline progress indicators, stop polling
+                    return;
+                }
+                
                 if (!hasLoggedNeverFound) {
                     logDebug('Waiting for progress bar...');
+                    // Start a separate interval to check for Storyline content
+                    if (!storylineProgressInterval) {
+                        storylineProgressInterval = setInterval(() => {
+                            if (checkForStorylineProgress()) {
+                                clearInterval(storylineProgressInterval);
+                                storylineProgressInterval = null;
+                            }
+                        }, 2000);
+                    }
                     hasLoggedNeverFound = true;
                 }
                 setTimeout(poll, 1000);
                 return;
             }
+            
+            // Clear Storyline check interval if we found the standard progress bar
+            if (storylineProgressInterval) {
+                clearInterval(storylineProgressInterval);
+                storylineProgressInterval = null;
+            }
+            
             logDebug('Progress bar found. Observing...');
             observer = new MutationObserver(() => {
                 checkAndAdvance(progressBarFill);
@@ -287,6 +401,7 @@
             observer.observe(progressBarFill, { attributes: true, attributeFilter: ['style'] });
             checkAndAdvance(progressBarFill);
         }
+        
         poll();
     }
 
@@ -534,8 +649,13 @@
 
     // ================ INIT ================
     function setupToggleUI() {
+        // Only set up UI in top frame
+        if (!isTopFrame) return;
+        
         injectUI();
         const toggle = document.getElementById('faa-toggle');
+        if (!toggle) return; // UI wasn't injected
+        
         getToggleState((enabled) => {
             toggle.checked = !!enabled;
         });
@@ -544,12 +664,54 @@
         });
     }
 
+    // Help identify what type of content we're in
+    function detectContentType() {
+        try {
+            // Check for Storyline 360 indicators
+            const isStoryline = !!document.querySelector('#app') || 
+                            !!document.querySelector('[class*="player"]') ||
+                            !!document.querySelector('[class*="slide"]') ||
+                            document.title.includes('Storyline') ||
+                            window.location.href.includes('story_content');
+            
+            // Check for SCORM wrapper indicators
+            const isScormWrapper = !!document.querySelector('#scorm_object') ||
+                                !!document.querySelector('#scormpage') ||
+                                window.location.href.includes('/scorm/player.php');
+            
+            return {
+                isStoryline,
+                isScormWrapper,
+                isCourseHomepage: isHomePage()
+            };
+        } catch (e) {
+            // Fall back to basic detection if any errors
+            return {
+                isStoryline: window.location.href.includes('story_content'),
+                isScormWrapper: window.location.href.includes('/scorm/player.php'),
+                isCourseHomepage: isHomePage()
+            };
+        }
+    }
+    
     function startScript() {
         function afterDOMReady() {
-            // Check if we're on the homepage and should click the next lesson
-            if (isHomePage()) {
-                logDebug('Detected course homepage.');
+            // Always set up UI in top frame only
+            if (isTopFrame) {
                 setupToggleUI();
+                logDebug(`Extension loaded in top frame: ${window.location.href}`);
+            }
+            
+            const contentType = detectContentType();
+            
+            // Log detected content type (only if interesting)
+            if (contentType.isStoryline || contentType.isScormWrapper || contentType.isCourseHomepage) {
+                logDebug(`Content type detected - Storyline: ${contentType.isStoryline}, SCORM: ${contentType.isScormWrapper}, Homepage: ${contentType.isCourseHomepage}`);
+            }
+            
+            // Check if we're on the homepage and should click the next lesson
+            if (contentType.isCourseHomepage) {
+                logDebug('Detected course homepage.');
                 
                 getToggleState(enabled => {
                     if (enabled) {
@@ -563,15 +725,29 @@
                 return;
             }
             
-            // Only run progress bar watcher if the progress bar is present in this frame
-            if (!document.querySelector('[data-ref="progressBarFill"]')) {
-                return; // Do nothing in frames without the player bar
+            // For Storyline content, always try to watch for progress
+            if (contentType.isStoryline) {
+                logDebug('Detected Storyline content. Setting up progress monitoring.');
+                waitForProgressBarFill();
+                setupManualNextListener();
+                return;
             }
-            setupToggleUI();
-            waitForProgressBarFill(); // Directly start polling for progress bar
-            setupManualNextListener();
-            logDebug('Extension loaded.');
+            
+            // For standard SCORM content, only run if progress bar is visible
+            const progressBarElement = document.querySelector('[data-ref="progressBarFill"]');
+            if (progressBarElement) {
+                logDebug('Found standard progress bar element. Setting up monitoring.');
+                waitForProgressBarFill();
+                setupManualNextListener();
+            } else if (!contentType.isScormWrapper && !contentType.isStoryline) {
+                // If no progress bar and not in a wrapper or Storyline, still try to set up monitoring
+                // This is a fallback for frames that might load content dynamically
+                logDebug('No progress bar found. Will poll for it to appear.');
+                waitForProgressBarFill();
+                setupManualNextListener();
+            }
         }
+        
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', afterDOMReady);
         } else {
